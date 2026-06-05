@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rifador - 3D Valen</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            light: '#e0f2fe',
+                            DEFAULT: '#0ea5e9',
+                            dark: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .ticket { transition: all 0.2s ease; }
+        .ticket:hover:not(.booked) { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .ticket.selected { background-color: #fde047; border-color: #eab308; color: #854d0e; }
+        .ticket.booked { background-color: #10b981; border-color: #059669; color: white; cursor: not-allowed; }
+        .ticket.booked.unpaid { background-color: #f97316; border-color: #ea580c; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-800 select-none flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand text-white p-2 rounded-lg shadow-sm">
+                    <i data-lucide="ticket" class="w-6 h-6"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-brand-dark">Rifador <span class="text-slate-400 font-normal text-lg hidden sm:inline">| Gestor de Sorteos</span></h1>
+            </div>
+            
+            <!-- Botonera Principal -->
+            <div class="flex items-center gap-2 flex-wrap justify-end">
+                <button type="button" onclick="openSyncModal()" class="text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow-sm" title="Sincronizar Dispositivos">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> <span class="hidden md:inline">Sincronizar</span>
+                </button>
+                <button type="button" onclick="openDatabaseModal()" class="text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow-sm" title="Base de Compradores">
+                    <i data-lucide="users" class="w-4 h-4"></i> <span class="hidden md:inline">Contactos</span>
+                </button>
+                <button type="button" onclick="openHistoryModal()" class="text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow-sm" title="Historial de Rifas">
+                    <i data-lucide="archive" class="w-4 h-4"></i> <span class="hidden md:inline">Historial</span>
+                </button>
+                <button type="button" onclick="openTemplatesModal()" class="text-yellow-600 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 px-3 py-2 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="star" class="w-4 h-4 fill-current"></i> <span class="hidden md:inline">Plantillas</span>
+                </button>
+                <button type="button" onclick="finishRaffle()" class="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-2 rounded-lg text-sm font-bold transition flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="flag" class="w-4 h-4 fill-current"></i> <span class="hidden md:inline">Sortear</span>
+                </button>
+                <button type="button" onclick="resetRaffleConfirm()" class="text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i> <span class="hidden md:inline">Nueva</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow items-start">
+        
+        <!-- Columna Izquierda: Grilla -->
+        <div class="lg:col-span-7 space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div class="flex flex-col mb-6 gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">Panel de Números</h2>
+                        <p class="text-sm text-slate-500">Hacé clic en los números libres para asignarlos.</p>
+                    </div>
+                    
+                    <!-- Barra de Estadísticas y Caja -->
+                    <div class="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700 bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl shadow-sm">
+                        <div class="flex items-center gap-1"><i data-lucide="hash" class="w-4 h-4 text-slate-400"></i> Total: <span id="total-count">100</span></div>
+                        <span class="text-slate-300 hidden sm:inline">|</span>
+                        <div class="flex items-center gap-1"><i data-lucide="users" class="w-4 h-4 text-slate-400"></i> Vendidos: <span id="sold-count">0</span></div>
+                        <span class="text-slate-300 hidden sm:inline">|</span>
+                        <div class="flex items-center gap-1"><i data-lucide="tag" class="w-4 h-4 text-slate-400"></i> Precio: <span id="ticket-price-display">$500</span></div>
+                        <span class="text-slate-300 hidden sm:inline">|</span>
+                        <div class="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
+                            <i data-lucide="wallet" class="w-4 h-4"></i> Recaudado: <strong id="collected-count">$0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tickets-grid" class="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                    <!-- Tickets generados por JS -->
+                </div>
+
+                <div class="mt-6 flex flex-wrap gap-4 text-sm text-slate-600 border-t pt-4">
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded border border-slate-300 bg-white"></div> Libre</div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-[#fde047]"></div> Seleccionado</div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-[#f97316]"></div> Reservado (Impago)</div>
+                    <div class="flex items-center gap-2"><div class="w-4 h-4 rounded bg-[#10b981]"></div> Pagado</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Controles -->
+        <div class="lg:col-span-5 space-y-6">
+            
+            <!-- Buscador -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i data-lucide="search" class="w-5 h-5 text-slate-400"></i> Buscar Comprador
+                </h3>
+                <input type="text" id="search-input" onkeyup="searchBuyer()" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand focus:border-brand outline-none mb-4" placeholder="Ingresá un nombre...">
+                
+                <div id="search-results" class="bg-slate-50 p-4 rounded-lg hidden">
+                    <!-- Resultados de búsqueda dinámicos -->
+                </div>
+            </div>
+
+            <!-- Asignar Números -->
+            <div id="assign-panel" class="bg-brand-light border border-brand p-6 rounded-2xl shadow-sm transition-all opacity-50 pointer-events-none">
+                <h3 class="font-bold text-brand-dark mb-4 flex items-center gap-2">
+                    <i data-lucide="user-plus" class="w-5 h-5"></i> Asignar Números
+                </h3>
+                <p class="text-sm text-brand-dark mb-4 min-h-[1.25rem]">Números: <strong id="selected-list">--</strong></p>
+                
+                <div class="space-y-4">
+                    <div class="relative">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Nombre del Comprador</label>
+                        <input type="text" id="buyer-name" autocomplete="off" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand focus:border-brand outline-none" placeholder="Ej: Gustavo" oninput="handleAutocomplete()" onfocus="handleAutocomplete()" onblur="setTimeout(() => document.getElementById('autocomplete-dropdown').classList.add('hidden'), 200)">
+                        
+                        <div id="autocomplete-dropdown" class="absolute z-20 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 hidden max-h-48 overflow-y-auto">
+                            <!-- Items generados por JS -->
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Teléfono</label>
+                        <input type="text" id="buyer-phone" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand focus:border-brand outline-none" placeholder="Ej: 1123456789">
+                    </div>
+                    
+                    <div class="flex items-center gap-2 bg-white p-3 rounded-lg border border-slate-200">
+                        <input type="checkbox" id="buyer-paid" class="w-5 h-5 text-brand rounded focus:ring-brand">
+                        <label for="buyer-paid" class="text-sm font-medium text-slate-700 cursor-pointer">Ya pagó (marcar con ✅)</label>
+                    </div>
+                    
+                    <div class="flex gap-2 pt-2">
+                        <button type="button" onclick="saveAssignment()" class="flex-1 bg-brand hover:bg-brand-dark text-white font-medium py-2 px-4 rounded-lg transition shadow-sm">
+                            Guardar
+                        </button>
+                        <button type="button" onclick="cancelSelection()" class="px-4 py-2 text-slate-600 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-300">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generador de Mensaje -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="align-left" class="w-5 h-5 text-slate-400"></i> Encabezado de la Rifa
+                    </h3>
+                    <button type="button" onclick="copyMessage()" class="text-brand hover:bg-brand-light px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i data-lucide="copy" class="w-4 h-4"></i> Copiar
+                    </button>
+                </div>
+                
+                <div class="mb-4">
+                    <textarea id="message-header" rows="5" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand focus:border-brand outline-none resize-none" oninput="saveData(); updateMessagePreview();">¡GRAN RIFA! 🎟️
+
+Elegí tus números, mandá el comprobante de pago por acá y te anoto en la lista oficial 👇🏻</textarea>
+                </div>
+
+                <div class="relative">
+                    <textarea id="message-preview" rows="12" class="w-full px-4 py-3 bg-slate-50 rounded-lg border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand" readonly></textarea>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <!-- Footer / Créditos -->
+    <footer class="mt-auto py-6 border-t border-slate-200 bg-slate-100 text-center">
+        <p class="text-slate-500 text-sm font-medium">Gestor <span class="font-bold text-slate-600">Rifador</span> <span class="font-mono text-slate-400">v1.4</span></p>
+        <p class="text-slate-400 text-xs mt-1">&copy; 2026 3D Valen - Creado con 🩵 por Ada y Siro</p>
+    </footer>
+
+    <!-- Firebase / Cloud Sync Module -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.isCloudAvailable = false;
+        let db, auth, appId, user;
+
+        const initFirebase = async () => {
+            try {
+                if (typeof __firebase_config !== 'undefined') {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+                    appId = typeof __app_id !== 'undefined' ? __app_id : 'rifador-app-id';
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    onAuthStateChanged(auth, (u) => {
+                        user = u;
+                        if(u) window.isCloudAvailable = true;
+                    });
+                }
+            } catch (e) {
+                console.warn("Base de datos en la nube no disponible (Ej: Corriendo en GitHub Pages).");
+            }
+        };
+        initFirebase();
+
+        window.saveToCloudFirestore = async function(syncCode, jsonData) {
+            if (!user || !db) return false;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'cloud_saves', syncCode);
+                await setDoc(docRef, { payload: jsonData, updatedAt: new Date().toISOString() });
+                return true;
+            } catch(e) {
+                console.error(e); return false;
+            }
+        };
+
+        window.loadFromCloudFirestore = async function(syncCode) {
+            if (!user || !db) return null;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'cloud_saves', syncCode);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    return snap.data().payload;
+                }
+                return null;
+            } catch(e) {
+                console.error(e); return null;
+            }
+        };
+    </script>
+
+    <!-- App Logic -->
+    <script>
+        lucide.createIcons();
+
+        // Variables de Estado
+        let raffleStart = 0;
+        let raffleEnd = 99;
+        let ticketPrice = 500;
+        let ticketsData = {}; 
+        let selectedNumbers = new Set();
+        
+        // Base de Datos
+        let favorites = []; // { name: "", phone: "" }
+        let raffleTemplates = []; // { name, start, end, price, header }
+        let raffleHistory = []; // { id, date, name, winningNumber, winnerName, winnerPhone, price, totalCollected, totalNumbers }
+
+        function loadData() {
+            const savedData = localStorage.getItem('rifa3dvalen_data');
+            const savedHeader = localStorage.getItem('rifa3dvalen_header');
+            const savedStart = localStorage.getItem('rifa3dvalen_start');
+            const savedEnd = localStorage.getItem('rifa3dvalen_end');
+            const savedPrice = localStorage.getItem('rifa3dvalen_price');
+            const savedFavs = localStorage.getItem('rifa3dvalen_favs');
+            const savedTemplates = localStorage.getItem('rifa3dvalen_templates');
+            const savedHistory = localStorage.getItem('rifa3dvalen_history');
+            
+            if (savedData) ticketsData = JSON.parse(savedData);
+            if (savedHeader) document.getElementById('message-header').value = savedHeader;
+            if (savedStart !== null) raffleStart = parseInt(savedStart);
+            if (savedEnd !== null) raffleEnd = parseInt(savedEnd);
+            if (savedPrice !== null) ticketPrice = parseFloat(savedPrice);
+            if (savedFavs) favorites = JSON.parse(savedFavs);
+            if (savedTemplates) raffleTemplates = JSON.parse(savedTemplates);
+            if (savedHistory) raffleHistory = JSON.parse(savedHistory);
+            
+            refreshApp();
+        }
+
+        function saveData() {
+            localStorage.setItem('rifa3dvalen_data', JSON.stringify(ticketsData));
+            localStorage.setItem('rifa3dvalen_header', document.getElementById('message-header').value);
+            localStorage.setItem('rifa3dvalen_start', raffleStart);
+            localStorage.setItem('rifa3dvalen_end', raffleEnd);
+            localStorage.setItem('rifa3dvalen_price', ticketPrice);
+            localStorage.setItem('rifa3dvalen_favs', JSON.stringify(favorites));
+            localStorage.setItem('rifa3dvalen_templates', JSON.stringify(raffleTemplates));
+            localStorage.setItem('rifa3dvalen_history', JSON.stringify(raffleHistory));
+        }
+
+        function refreshApp() {
+            renderGrid();
+            updateMessagePreview();
+            updateCounters();
+            searchBuyer();
+            updateAssignPanel();
+        }
+
+        function formatNumber(num) {
+            const maxLength = Math.max(raffleEnd.toString().length, 2);
+            return num.toString().padStart(maxLength, '0');
+        }
+
+        function getLast4Digits(phone) {
+            if (!phone) return '';
+            const phoneStr = phone.toString();
+            return phoneStr.length > 4 ? phoneStr.slice(-4) : phoneStr;
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('tickets-grid');
+            grid.innerHTML = '';
+            
+            for (let i = raffleStart; i <= raffleEnd; i++) {
+                const numStr = formatNumber(i);
+                const ticketData = ticketsData[numStr];
+                
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'ticket aspect-square flex flex-col items-center justify-center rounded-lg border font-medium text-lg transition-colors relative group overflow-hidden';
+                btn.innerText = numStr;
+                btn.onclick = () => toggleNumberSelection(numStr);
+
+                if (ticketData) {
+                    btn.classList.add('booked');
+                    if (!ticketData.paid) btn.classList.add('unpaid');
+                    
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'absolute inset-0 bg-black/80 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center px-1 leading-tight';
+                    tooltip.innerText = ticketData.name;
+                    btn.appendChild(tooltip);
+                } else {
+                    btn.classList.add('border-slate-300', 'text-slate-600', 'bg-white', 'hover:border-brand', 'hover:text-brand');
+                    if (selectedNumbers.has(numStr)) {
+                        btn.classList.add('selected');
+                    }
+                }
+                grid.appendChild(btn);
+            }
+        }
+
+        function toggleNumberSelection(numStr) {
+            if (ticketsData[numStr]) {
+                const buyerName = ticketsData[numStr].name;
+                
+                const allNumbers = Object.entries(ticketsData)
+                    .filter(([k, v]) => v.name === buyerName)
+                    .map(([k, v]) => k)
+                    .sort();
+                const numbersListStr = allNumbers.join(', ');
+                
+                const unpaidForThisBuyer = Object.entries(ticketsData).filter(([k, v]) => v.name === buyerName && !v.paid);
+
+                Swal.fire({
+                    title: `Número ${numStr}`,
+                    html: `
+                        <div class="text-left space-y-2 text-sm mt-4">
+                            <p>👤 Asignado a: <b>${buyerName}</b> (*${getLast4Digits(ticketsData[numStr].phone)})</p>
+                            <p>🎟️ <b>Todos sus números (${allNumbers.length}):</b> <br><span class="font-mono bg-slate-100 px-2 py-1 rounded inline-block mt-1 border">${numbersListStr}</span></p>
+                            <p>💰 Estado (Nº ${numStr}): <b>${ticketsData[numStr].paid ? '<span class="text-emerald-600">Pagado ✅</span>' : '<span class="text-orange-600">Impago ❌</span>'}</b></p>
+                        </div>
+                    `,
+                    icon: 'info',
+                    showCancelButton: true,
+                    showDenyButton: !ticketsData[numStr].paid,
+                    confirmButtonColor: '#ef4444',
+                    denyButtonColor: '#10b981',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'Liberar Este Número',
+                    denyButtonText: unpaidForThisBuyer.length > 1 ? `Pagar TODOS (${unpaidForThisBuyer.length})` : 'Marcar Pagado',
+                    cancelButtonText: 'Cerrar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        delete ticketsData[numStr];
+                        saveData();
+                        refreshApp();
+                    } else if (result.isDenied) {
+                        unpaidForThisBuyer.forEach(([k, v]) => { ticketsData[k].paid = true; });
+                        saveData();
+                        refreshApp();
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Pagos actualizados', showConfirmButton: false, timer: 2000 });
+                    }
+                });
+                return;
+            }
+
+            if (selectedNumbers.has(numStr)) {
+                selectedNumbers.delete(numStr);
+            } else {
+                selectedNumbers.add(numStr);
+            }
+            refreshApp();
+        }
+
+        function updateAssignPanel() {
+            const panel = document.getElementById('assign-panel');
+            const listSpan = document.getElementById('selected-list');
+            
+            if (selectedNumbers.size > 0) {
+                panel.classList.remove('opacity-50', 'pointer-events-none');
+                const sorted = Array.from(selectedNumbers).sort((a, b) => parseInt(a) - parseInt(b));
+                listSpan.innerText = sorted.join(', ');
+                
+                // Evitar auto-focus en celulares para que no salte el teclado molesto
+                if (!document.getElementById('buyer-name').value && window.innerWidth > 768) {
+                    document.getElementById('buyer-name').focus();
+                }
+            } else {
+                panel.classList.add('opacity-50', 'pointer-events-none');
+                listSpan.innerText = '--';
+                clearForm();
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('buyer-name').value = '';
+            document.getElementById('buyer-phone').value = '';
+            document.getElementById('buyer-paid').checked = false;
+        }
+
+        function cancelSelection() {
+            selectedNumbers.clear();
+            refreshApp();
+        }
+
+        function saveAssignment() {
+            const name = document.getElementById('buyer-name').value.trim();
+            const phone = document.getElementById('buyer-phone').value.trim();
+            const paid = document.getElementById('buyer-paid').checked;
+
+            if (!name) {
+                Swal.fire('Falta el nombre', 'Ingresá el nombre del comprador para continuar.', 'warning');
+                return;
+            }
+
+            // AUTO ADD/UPDATE TO FAVORITES
+            const existingFavIndex = favorites.findIndex(f => f.name.toLowerCase() === name.toLowerCase());
+            if (existingFavIndex === -1) {
+                favorites.push({ name, phone });
+            } else if (phone && !favorites[existingFavIndex].phone) {
+                favorites[existingFavIndex].phone = phone;
+            }
+
+            selectedNumbers.forEach(num => {
+                ticketsData[num] = { name, phone, paid };
+            });
+
+            selectedNumbers.clear();
+            clearForm();
+            saveData();
+            refreshApp();
+            
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Números asignados', showConfirmButton: false, timer: 2000 });
+        }
+
+        // ==========================================
+        // AUTOCOMPLETADO
+        // ==========================================
+        function handleAutocomplete() {
+            const inputVal = document.getElementById('buyer-name').value.toLowerCase().trim();
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            dropdown.innerHTML = '';
+
+            if (inputVal.length < 1) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            const uniqueBuyers = new Map();
+            favorites.forEach(f => uniqueBuyers.set(f.name.toLowerCase(), f));
+            Object.values(ticketsData).forEach(t => {
+                if(!uniqueBuyers.has(t.name.toLowerCase())) {
+                    uniqueBuyers.set(t.name.toLowerCase(), { name: t.name, phone: t.phone });
+                }
+            });
+
+            const matches = Array.from(uniqueBuyers.values()).filter(b => b.name.toLowerCase().includes(inputVal));
+
+            if (matches.length > 0) {
+                matches.forEach(match => {
+                    const div = document.createElement('div');
+                    const isFav = favorites.some(f => f.name === match.name);
+                    const maskedPhone = match.phone ? `*${getLast4Digits(match.phone)}` : '-';
+                    
+                    div.className = 'px-4 py-3 hover:bg-brand-light cursor-pointer text-sm text-slate-700 transition-colors flex justify-between items-center border-b border-slate-50 last:border-0';
+                    div.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            ${isFav ? '<i data-lucide="star" class="w-3 h-3 text-yellow-500 fill-current"></i>' : '<i data-lucide="user" class="w-3 h-3 text-slate-400"></i>'}
+                            <span class="font-medium">${match.name}</span>
+                        </div>
+                        <span class="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">${maskedPhone}</span>
+                    `;
+                    div.onmousedown = (e) => {
+                        e.preventDefault(); 
+                        document.getElementById('buyer-name').value = match.name;
+                        document.getElementById('buyer-phone').value = match.phone || '';
+                        dropdown.classList.add('hidden');
+                        document.getElementById('buyer-paid').focus();
+                    };
+                    dropdown.appendChild(div);
+                });
+                lucide.createIcons();
+                dropdown.classList.remove('hidden');
+            } else {
+                dropdown.classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // BUSCADOR Y ACCIONES RÁPIDAS
+        // ==========================================
+        function searchBuyer() {
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (query === "") {
+                resultsDiv.classList.add('hidden');
+                return;
+            }
+
+            let foundNumbers = [];
+            let unpaidCount = 0;
+
+            for (const [num, data] of Object.entries(ticketsData)) {
+                if (data.name.toLowerCase().includes(query)) {
+                    foundNumbers.push({ num, ...data });
+                    if (!data.paid) unpaidCount++;
+                }
+            }
+
+            if (foundNumbers.length > 0) {
+                resultsDiv.classList.remove('hidden');
+                const nameDisplay = foundNumbers[0].name; 
+                const phoneDisplay = foundNumbers[0].phone || '';
+                const numbersList = foundNumbers.map(f => f.num).sort().join(', ');
+                
+                let html = `<p class="text-sm mb-3"><strong>${nameDisplay}</strong> tiene <strong>${foundNumbers.length}</strong> número(s): <span class="font-mono bg-white px-2 py-0.5 rounded border leading-relaxed">${numbersList}</span></p>`;
+                
+                html += `<div class="flex flex-wrap gap-2 pt-2 border-t border-slate-200">`;
+                
+                html += `<button type="button" onclick="freeAllNumbers('${nameDisplay}')" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition shadow-sm font-medium flex items-center gap-1">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Liberar Todos
+                </button>`;
+                
+                if (unpaidCount > 0) {
+                    html += `<button type="button" onclick="markAllAsPaid('${nameDisplay}')" class="text-xs px-3 py-1.5 rounded-lg border border-brand bg-brand text-white hover:bg-brand-dark transition shadow-sm font-medium flex items-center gap-1">
+                        <i data-lucide="check-circle" class="w-3 h-3"></i> Pagar Impagos (${unpaidCount})
+                    </button>`;
+                }
+                
+                html += `</div>`;
+                
+                resultsDiv.innerHTML = html;
+                lucide.createIcons();
+            } else {
+                resultsDiv.classList.remove('hidden');
+                resultsDiv.innerHTML = `<p class="text-sm text-slate-500">No se encontraron números para "${query}".</p>`;
+            }
+        }
+
+        function markAllAsPaid(name) {
+            for (const key in ticketsData) {
+                if (ticketsData[key].name === name) {
+                    ticketsData[key].paid = true;
+                }
+            }
+            saveData();
+            refreshApp();
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Todos marcados como pagos', showConfirmButton: false, timer: 2000 });
+        }
+
+        function freeAllNumbers(name) {
+            Swal.fire({
+                title: '¿Liberar todos?',
+                text: `Vas a cancelar TODOS los números asignados a ${name}.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, liberar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    for (const key in ticketsData) {
+                        if (ticketsData[key].name === name) {
+                            delete ticketsData[key];
+                        }
+                    }
+                    saveData();
+                    refreshApp();
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Números liberados', showConfirmButton: false, timer: 2000 });
+                }
+            });
+        }
+
+        // ==========================================
+        // TEXTO, CONTADORES Y RECAUDACIÓN
+        // ==========================================
+        function updateMessagePreview() {
+            const header = document.getElementById('message-header').value;
+            const previewBox = document.getElementById('message-preview');
+            
+            let listText = "";
+            for (let i = raffleStart; i <= raffleEnd; i++) {
+                const numStr = formatNumber(i);
+                const ticket = ticketsData[numStr];
+                
+                if (ticket) {
+                    const checkMark = ticket.paid ? " ✅" : "";
+                    const phoneStr = ticket.phone ? ` ${getLast4Digits(ticket.phone)}` : "";
+                    listText += `${numStr} ${ticket.name}${phoneStr}${checkMark}\n`;
+                } else {
+                    listText += `${numStr}\n`;
+                }
+            }
+
+            previewBox.value = header + (header.trim() ? "\n\n" : "") + listText;
+            previewBox.style.height = 'auto';
+            previewBox.style.height = (previewBox.scrollHeight) + 'px';
+        }
+
+        function copyMessage() {
+            const previewBox = document.getElementById('message-preview');
+            previewBox.select();
+            document.execCommand('copy');
+            Swal.fire({ toast: true, position: 'bottom-end', icon: 'success', title: '¡Texto copiado!', showConfirmButton: false, timer: 2500 });
+        }
+
+        function updateCounters() {
+            const total = raffleEnd - raffleStart + 1;
+            const sold = Object.keys(ticketsData).length;
+            
+            let paidCount = 0;
+            for (let key in ticketsData) {
+                if (ticketsData[key].paid) paidCount++;
+            }
+            
+            const collected = paidCount * ticketPrice;
+
+            document.getElementById('total-count').innerText = total;
+            document.getElementById('sold-count').innerText = sold;
+            document.getElementById('ticket-price-display').innerText = '$' + ticketPrice;
+            document.getElementById('collected-count').innerText = '$' + collected.toLocaleString('es-AR');
+        }
+
+        // ==========================================
+        // SISTEMA DE PLANTILLAS
+        // ==========================================
+        function openTemplatesModal() {
+            let html = '<div class="space-y-3 text-left max-h-96 overflow-y-auto">';
+            
+            if (raffleTemplates.length === 0) {
+                html += '<p class="text-sm text-slate-500 mb-4 text-center">No tenés configuraciones guardadas aún.</p>';
+            } else {
+                raffleTemplates.forEach((t, i) => {
+                    html += `
+                    <div class="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div>
+                            <p class="font-bold text-slate-700">${t.name}</p>
+                            <p class="text-xs text-slate-500">Del ${t.start} al ${t.end} • $${t.price} c/u</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="useTemplate(${i})" class="bg-brand text-white hover:bg-brand-dark px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm">Usar</button>
+                            <button type="button" onclick="deleteTemplate(${i})" class="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-2 py-1.5 rounded-lg text-xs transition" title="Eliminar"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                        </div>
+                    </div>`;
+                });
+            }
+            
+            html += `
+                <button type="button" onclick="saveCurrentConfigAsTemplate()" class="w-full mt-4 bg-yellow-100 text-yellow-800 border border-yellow-300 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2 hover:bg-yellow-200 transition shadow-sm">
+                    <i data-lucide="star" class="w-4 h-4 fill-current"></i> Guardar Rifa Actual como Favorita
+                </button>
+            </div>`;
+
+            Swal.fire({
+                title: 'Rifas Frecuentes',
+                html: html,
+                showConfirmButton: false,
+                showCloseButton: true,
+                didOpen: () => lucide.createIcons()
+            });
+        }
+
+        function saveCurrentConfigAsTemplate() {
+            Swal.fire({
+                title: 'Guardar Configuración',
+                input: 'text',
+                inputLabel: 'Nombre (Ej: Llavero 3D o Figuritas)',
+                inputPlaceholder: 'Ingresá un nombre...',
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar'
+            }).then(res => {
+                if (res.isConfirmed && res.value) {
+                    raffleTemplates.push({
+                        name: res.value.trim(),
+                        start: raffleStart,
+                        end: raffleEnd,
+                        price: ticketPrice,
+                        header: document.getElementById('message-header').value
+                    });
+                    saveData();
+                    openTemplatesModal(); 
+                }
+            });
+        }
+
+        function deleteTemplate(index) {
+            raffleTemplates.splice(index, 1);
+            saveData();
+            openTemplatesModal();
+        }
+
+        function useTemplate(index) {
+            const t = raffleTemplates[index];
+            Swal.fire({
+                title: `¿Iniciar "${t.name}"?`,
+                text: `Se creará una rifa del ${t.start} al ${t.end} de $${t.price}. ¡Esto borrará todos los números asignados actualmente!`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, borrar e iniciar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    raffleStart = t.start;
+                    raffleEnd = t.end;
+                    ticketPrice = t.price;
+                    if (t.header) {
+                        document.getElementById('message-header').value = t.header;
+                    }
+                    ticketsData = {};
+                    selectedNumbers.clear();
+                    
+                    saveData();
+                    document.getElementById('search-input').value = '';
+                    refreshApp();
+                    Swal.fire('¡Rifa Lista!', `Configuración "${t.name}" cargada.`, 'success');
+                }
+            });
+        }
+
+        // ==========================================
+        // NUEVA RIFA Y SORTEO (HISTORIAL)
+        // ==========================================
+        function resetRaffleConfirm() {
+            Swal.fire({
+                title: 'Nueva Rifa Personalizada',
+                html: `
+                    <p class="mb-4 text-sm text-slate-600">Configurá los detalles. <b>¡Esto borrará la rifa activa!</b></p>
+                    <div class="flex gap-4 justify-center mb-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Desde</label>
+                            <input id="swal-start" type="number" class="w-20 px-3 py-2 border border-slate-300 rounded focus:border-brand outline-none text-center" value="${raffleStart}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Hasta</label>
+                            <input id="swal-end" type="number" class="w-20 px-3 py-2 border border-slate-300 rounded focus:border-brand outline-none text-center" value="${raffleEnd}">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Precio por Número ($)</label>
+                        <input id="swal-price" type="number" class="w-32 px-3 py-2 border border-slate-300 rounded focus:border-brand outline-none text-center mx-auto" value="${ticketPrice}">
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Empezar de cero',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    return {
+                        start: parseInt(document.getElementById('swal-start').value),
+                        end: parseInt(document.getElementById('swal-end').value),
+                        price: parseFloat(document.getElementById('swal-price').value)
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const { start, end, price } = result.value;
+                    if (start >= end || isNaN(start) || isNaN(end) || isNaN(price) || price < 0) {
+                        Swal.fire('Error', 'Verificá que el rango y el precio sean correctos.', 'error');
+                        return;
+                    }
+                    raffleStart = start;
+                    raffleEnd = end;
+                    ticketPrice = price;
+                    ticketsData = {};
+                    selectedNumbers.clear();
+                    
+                    saveData();
+                    document.getElementById('search-input').value = '';
+                    refreshApp();
+                    Swal.fire('¡Rifa Lista!', `Creada del ${start} al ${end} a $${price}.`, 'success');
+                }
+            })
+        }
+
+        function finishRaffle() {
+            if(Object.keys(ticketsData).length === 0) {
+                Swal.fire('Rifa Vacía', 'No hay números vendidos para sortear.', 'warning');
+                return;
+            }
+
+            let defaultTitle = document.getElementById('message-header').value.split('\n')[0].trim();
+            if (!defaultTitle || defaultTitle.length > 30) defaultTitle = `Rifa ${raffleStart}-${raffleEnd}`;
+
+            Swal.fire({
+                title: '🎉 Sortear y Finalizar',
+                html: `
+                    <p class="text-sm text-slate-600 mb-4">Ingresá el <b>Premio</b> y el <b>Número ganador</b> de la Lotería.</p>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1 text-left">Premio que se rifó</label>
+                            <input id="swal-prize-name" type="text" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none" value="${defaultTitle}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1 text-left">Número Ganador</label>
+                            <input id="swal-winner-num" type="text" class="w-24 px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none text-center font-bold text-xl mx-auto block" placeholder="--">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '🏆 Confirmar Ganador',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    let numVal = document.getElementById('swal-winner-num').value.trim();
+                    let prizeVal = document.getElementById('swal-prize-name').value.trim();
+                    
+                    if (!numVal || !prizeVal) {
+                        Swal.showValidationMessage('Tenés que completar ambos campos.');
+                        return false;
+                    }
+                    const numStr = formatNumber(parseInt(numVal) || numVal); 
+                    if (!ticketsData[numStr]) {
+                        Swal.showValidationMessage(`El número ${numStr} está libre o no existe.`);
+                        return false;
+                    }
+                    return { winningNum: numStr, prizeName: prizeVal };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const winningNum = result.value.winningNum;
+                    const prizeName = result.value.prizeName;
+                    const winner = ticketsData[winningNum];
+                    
+                    let paidCount = 0;
+                    for (let key in ticketsData) { if (ticketsData[key].paid) paidCount++; }
+                    const collected = paidCount * ticketPrice;
+                    const totalNumbersCount = raffleEnd - raffleStart + 1;
+
+                    // Guardar en historial
+                    raffleHistory.push({
+                        id: Date.now(),
+                        date: new Date().toLocaleDateString('es-AR'),
+                        name: prizeName,
+                        winningNumber: winningNum,
+                        winnerName: winner.name,
+                        winnerPhone: winner.phone || '-',
+                        price: ticketPrice,
+                        totalCollected: collected,
+                        totalNumbers: totalNumbersCount
+                    });
+                    saveData();
+
+                    // Festejo y reseteo
+                    Swal.fire({
+                        title: '¡Tenemos un Ganador!',
+                        html: `
+                            <p class="text-lg">🏆 <b>${winner.name}</b></p>
+                            <p class="text-slate-500">Con el número <b>${winningNum}</b></p>
+                            <p class="text-sm mt-3 bg-slate-100 p-2 rounded">La rifa se guardó en el historial de forma exitosa.</p>
+                        `,
+                        icon: 'success',
+                        showCancelButton: true,
+                        confirmButtonText: 'Limpiar Grilla (Nueva Rifa)',
+                        cancelButtonText: 'Cerrar y mantener números',
+                        confirmButtonColor: '#0ea5e9'
+                    }).then((res2) => {
+                        if (res2.isConfirmed) {
+                            ticketsData = {};
+                            selectedNumbers.clear();
+                            saveData();
+                            refreshApp();
+                        }
+                    });
+                }
+            });
+        }
+
+        // ==========================================
+        // GESTIÓN DE BASE DE DATOS Y MODALES
+        // ==========================================
+        function openHistoryModal() {
+            let html = '<div class="space-y-3 text-left max-h-96 overflow-y-auto pr-2">';
+            if(raffleHistory.length === 0) {
+                html += '<p class="text-sm text-slate-500 text-center py-4">Todavía no sorteaste ninguna rifa.</p>';
+            } else {
+                raffleHistory.slice().reverse().forEach((r, reversedIndex) => { 
+                    const realIndex = raffleHistory.length - 1 - reversedIndex;
+                    html += `
+                    <div class="p-4 bg-white border border-slate-200 rounded-xl shadow-sm relative fade-in group">
+                        <button onclick="deleteHistory(${realIndex})" class="absolute top-3 right-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar registro"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        <p class="text-xs font-bold text-slate-400 mb-1 tracking-wider uppercase">${r.date}</p>
+                        <p class="font-bold text-slate-800 leading-tight mb-1 line-clamp-1">🎁 ${r.name}</p>
+                        <p class="text-xs text-slate-500 mb-3">${r.totalNumbers ? r.totalNumbers + ' números' : 'Rifa'} a $${r.price || 0} c/u</p>
+                        
+                        <div class="bg-gradient-to-r from-emerald-50 to-emerald-100/50 p-3 rounded-lg border border-emerald-100 text-sm flex flex-col gap-2">
+                            <div class="flex items-center justify-between">
+                                <span class="flex items-center gap-1.5 text-emerald-800 font-medium"><i data-lucide="crown" class="w-4 h-4"></i> ${r.winnerName} (Nº ${r.winningNumber})</span>
+                                <span class="text-xs text-emerald-600 font-mono" title="Teléfono oculto">*${getLast4Digits(r.winnerPhone)}</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-emerald-700 text-xs mt-1 border-t border-emerald-200/50 pt-2">
+                                <i data-lucide="wallet" class="w-3.5 h-3.5"></i> Recaudado: <b>$${(r.totalCollected || 0).toLocaleString('es-AR')}</b>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            }
+            html += '</div>';
+
+            if(raffleHistory.length > 0) {
+                html += `
+                <button type="button" onclick="clearFullHistory()" class="w-full mt-4 bg-red-50 text-red-600 border border-red-200 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2 hover:bg-red-100 transition shadow-sm">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Vaciar Historial Completo
+                </button>`;
+            }
+
+            Swal.fire({
+                title: '📜 Historial de Rifas',
+                html: html,
+                showConfirmButton: false,
+                showCloseButton: true,
+                width: '600px',
+                didOpen: () => lucide.createIcons()
+            });
+        }
+
+        function deleteHistory(index) {
+           Swal.fire({
+               title: '¿Borrar registro?',
+               text: "Se eliminará esta rifa del historial. Los ganadores ya no contarán con esta victoria en su perfil.",
+               icon: 'warning',
+               showCancelButton: true,
+               confirmButtonText: 'Sí, borrar',
+               cancelButtonText: 'Cancelar',
+               confirmButtonColor: '#ef4444'
+           }).then(res => {
+               if(res.isConfirmed) {
+                   raffleHistory.splice(index, 1);
+                   saveData();
+                   openHistoryModal();
+                   refreshApp(); 
+               }
+           });
+        }
+
+        function clearFullHistory() {
+            Swal.fire({
+                title: '¿Vaciar Historial?',
+                text: "Se borrarán TODAS las rifas pasadas. Los ganadores perderán sus medallas. ¡Esta acción no se puede deshacer!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, borrar todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    raffleHistory = [];
+                    saveData();
+                    openHistoryModal();
+                    refreshApp(); 
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Historial borrado', showConfirmButton: false, timer: 2000});
+                }
+            });
+        }
+
+        function openDatabaseModal() {
+            let html = `
+                <div class="mb-4 relative">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-slate-400"></i>
+                    <input type="text" id="db-search" onkeyup="filterDatabase()" class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand outline-none text-sm shadow-sm" placeholder="Buscar contacto por nombre o teléfono...">
+                </div>
+            `;
+            
+            html += '<div id="db-list-container" class="space-y-2 text-left max-h-80 overflow-y-auto pr-2">';
+            
+            if(favorites.length === 0) {
+                html += '<p id="db-empty-msg" class="text-sm text-slate-500 text-center py-4">No tenés compradores guardados en la base de datos.</p>';
+            } else {
+                html += '<p id="db-empty-msg" class="text-sm text-slate-500 text-center py-4 hidden">No se encontraron contactos.</p>';
+                let sortedFavs = [...favorites].sort((a,b) => a.name.localeCompare(b.name));
+                sortedFavs.forEach((fav) => {
+                    const wins = raffleHistory.filter(r => r.winnerName.toLowerCase() === fav.name.toLowerCase()).length;
+                    const winBadge = wins > 0 ? `<span class="bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-yellow-300 ml-2 shadow-sm uppercase tracking-wider" title="Ganador de ${wins} rifas">🏆 ${wins} VECES GANADOR</span>` : '';
+                    
+                    html += `
+                    <div class="db-item flex justify-between items-center p-3 bg-white border border-slate-200 shadow-sm rounded-xl fade-in" data-name="${fav.name.toLowerCase()}" data-phone="${fav.phone || ''}">
+                        <div>
+                            <p class="font-bold text-slate-800 flex items-center">${fav.name} ${winBadge}</p>
+                            <p class="text-xs text-slate-500 font-mono mt-0.5"><i data-lucide="phone" class="w-3 h-3 inline"></i> ${fav.phone || 'Sin teléfono'}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="editFavorite('${fav.name}')" class="text-brand-dark bg-brand-light hover:bg-brand hover:text-white px-2.5 py-2 rounded-lg text-xs transition shadow-sm" title="Editar"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                            <button type="button" onclick="deleteFavorite('${fav.name}')" class="text-red-600 bg-red-50 hover:bg-red-500 hover:text-white px-2.5 py-2 rounded-lg text-xs transition shadow-sm" title="Eliminar"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>`;
+                });
+            }
+            html += '</div>'; 
+            
+            html += `
+                <button type="button" onclick="addNewFavorite()" class="w-full mt-4 bg-brand-light text-brand-dark border border-brand py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2 hover:bg-brand hover:text-white transition shadow-sm">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i> Añadir Nuevo Contacto
+                </button>`;
+
+            Swal.fire({
+                title: '📇 Base de Compradores',
+                html: html,
+                showConfirmButton: false,
+                showCloseButton: true,
+                width: '600px',
+                didOpen: () => lucide.createIcons()
+            });
+        }
+
+        function filterDatabase() {
+            const query = document.getElementById('db-search').value.toLowerCase().trim();
+            const items = document.querySelectorAll('.db-item');
+            let visibleCount = 0;
+            
+            items.forEach(item => {
+                const name = item.getAttribute('data-name');
+                const phone = item.getAttribute('data-phone');
+                
+                if (name.includes(query) || phone.includes(query)) {
+                    item.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            const emptyMsg = document.getElementById('db-empty-msg');
+            if (emptyMsg && items.length > 0) {
+                if (visibleCount === 0) {
+                    emptyMsg.classList.remove('hidden');
+                } else {
+                    emptyMsg.classList.add('hidden');
+                }
+            }
+        }
+
+        function addNewFavorite() {
+            Swal.fire({
+                title: 'Nuevo Contacto',
+                html: `
+                    <label class="block text-left text-xs font-bold text-slate-700 mb-1 mt-4">Nombre</label>
+                    <input id="new-fav-name" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none" placeholder="Ej: Gustavo">
+                    <label class="block text-left text-xs font-bold text-slate-700 mb-1 mt-3">Teléfono Completo</label>
+                    <input id="new-fav-phone" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none" placeholder="Ej: 1123456789">
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#0ea5e9',
+                preConfirm: () => {
+                    const newName = document.getElementById('new-fav-name').value.trim();
+                    if(!newName) {
+                        Swal.showValidationMessage('El nombre no puede estar vacío');
+                        return false;
+                    }
+                    return {
+                        name: newName,
+                        phone: document.getElementById('new-fav-phone').value.trim()
+                    }
+                }
+            }).then(res => {
+                if(res.isConfirmed && res.value.name) {
+                    const exists = favorites.findIndex(f => f.name.toLowerCase() === res.value.name.toLowerCase());
+                    if(exists >= 0) {
+                        Swal.fire('Error', 'Este contacto ya existe en la base.', 'error').then(() => openDatabaseModal());
+                        return;
+                    }
+                    favorites.push({ name: res.value.name, phone: res.value.phone });
+                    saveData();
+                    refreshApp();
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Contacto guardado', showConfirmButton: false, timer: 1500}).then(() => openDatabaseModal());
+                } else if (res.isDismissed) {
+                    openDatabaseModal(); 
+                }
+            });
+        }
+
+        function editFavorite(oldName) {
+            const fav = favorites.find(f => f.name === oldName);
+            if(!fav) return;
+            Swal.fire({
+                title: 'Editar Contacto',
+                html: `
+                    <label class="block text-left text-xs font-bold text-slate-700 mb-1 mt-4">Nombre</label>
+                    <input id="edit-fav-name" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none" value="${fav.name}">
+                    <label class="block text-left text-xs font-bold text-slate-700 mb-1 mt-3">Teléfono Completo</label>
+                    <input id="edit-fav-phone" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-brand outline-none" value="${fav.phone || ''}">
+                    <p class="text-xs text-slate-500 text-left mt-3">💡 Si modificás el nombre, se actualizarán automáticamente todos los números que tenga asignados en la rifa actual.</p>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#0ea5e9',
+                preConfirm: () => {
+                    const newName = document.getElementById('edit-fav-name').value.trim();
+                    if(!newName) {
+                        Swal.showValidationMessage('El nombre no puede estar vacío');
+                        return false;
+                    }
+                    return {
+                        name: newName,
+                        phone: document.getElementById('edit-fav-phone').value.trim()
+                    }
+                }
+            }).then(res => {
+                if(res.isConfirmed && res.value.name) {
+                    for(let key in ticketsData) {
+                        if(ticketsData[key].name === oldName) {
+                            ticketsData[key].name = res.value.name;
+                            ticketsData[key].phone = res.value.phone;
+                        }
+                    }
+                    fav.name = res.value.name;
+                    fav.phone = res.value.phone;
+                    saveData();
+                    refreshApp();
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Contacto actualizado', showConfirmButton: false, timer: 1500}).then(() => openDatabaseModal());
+                } else if (res.isDismissed) {
+                    openDatabaseModal(); 
+                }
+            });
+        }
+
+        function deleteFavorite(name) {
+            Swal.fire({
+                title: '¿Eliminar de la Base?',
+                text: `Vas a borrar a ${name}. (Tranquilo, si tiene números en la rifa actual NO se van a borrar, solo desaparece de tus contactos rápidos).`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    favorites = favorites.filter(f => f.name !== name);
+                    saveData();
+                    refreshApp();
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Contacto eliminado', showConfirmButton: false, timer: 1500}).then(() => openDatabaseModal());
+                } else if (result.isDismissed) {
+                    openDatabaseModal();
+                }
+            });
+        }
+
+        // ==========================================
+        // SISTEMA DE SINCRONIZACIÓN (NUBE & MANUAL)
+        // ==========================================
+        function getBackupPayload() {
+            return JSON.stringify({
+                data: ticketsData, header: document.getElementById('message-header').value,
+                start: raffleStart, end: raffleEnd, price: ticketPrice,
+                favs: favorites, templates: raffleTemplates, history: raffleHistory
+            });
+        }
+
+        function applyBackupPayload(jsonStr) {
+            try {
+                const parsed = JSON.parse(jsonStr);
+                ticketsData = parsed.data || {};
+                if(parsed.header !== undefined) document.getElementById('message-header').value = parsed.header;
+                if(parsed.start !== undefined) raffleStart = parsed.start;
+                if(parsed.end !== undefined) raffleEnd = parsed.end;
+                if(parsed.price !== undefined) ticketPrice = parsed.price;
+                if(parsed.favs !== undefined) favorites = parsed.favs;
+                if(parsed.templates !== undefined) raffleTemplates = parsed.templates;
+                if(parsed.history !== undefined) raffleHistory = parsed.history;
+                saveData(); 
+                refreshApp();
+                return true;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        function openSyncModal() {
+            const cloudUI = window.isCloudAvailable ? `
+                <div class="bg-brand-light p-4 rounded-xl border border-brand mb-5">
+                    <h4 class="font-bold text-brand-dark mb-2 text-sm flex items-center gap-1.5"><i data-lucide="cloud" class="w-4 h-4"></i> Conexión a la Nube</h4>
+                    <p class="text-xs text-brand-dark mb-3">Generá un PIN para pasar tus datos a otro dispositivo al instante.</p>
+                    <div class="flex gap-2">
+                        <button onclick="handleCloudExport()" class="flex-1 bg-brand text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-brand-dark transition shadow-sm">Subir Datos (Crear PIN)</button>
+                        <button onclick="handleCloudImport()" class="flex-1 bg-white text-brand border border-brand px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition shadow-sm">Bajar Datos (Usar PIN)</button>
+                    </div>
+                    <div id="cloud-status-box" class="hidden mt-3 p-3 rounded-lg text-sm text-center"></div>
+                </div>
+            ` : `
+                <div class="bg-orange-50 p-4 rounded-xl border border-orange-200 mb-5">
+                    <h4 class="font-bold text-orange-800 mb-1 text-sm flex items-center gap-1.5"><i data-lucide="cloud-off" class="w-4 h-4"></i> Nube no conectada</h4>
+                    <p class="text-xs text-orange-700 leading-relaxed">Como subiste la app a GitHub Pages, la base de datos de prueba está desconectada. <br><b>Usá la Opción Manual (B) para transferir por WhatsApp.</b></p>
+                </div>
+            `;
+
+            Swal.fire({
+                title: '🔄 Sincronizar Dispositivos',
+                html: `
+                    <div class="text-left mt-2">
+                        ${cloudUI}
+                        
+                        <div class="bg-slate-100 p-4 rounded-xl border border-slate-200">
+                            <h4 class="font-bold text-slate-700 mb-2 text-sm flex items-center gap-1.5"><i data-lucide="smartphone" class="w-4 h-4"></i> Opción B: Código Manual</h4>
+                            <p class="text-xs text-slate-500 mb-3">Copia tu código, mandátelo por WhatsApp a vos mismo y pegalo en tu celular.</p>
+                            <div class="flex gap-2">
+                                <button onclick="handleManualExport()" class="flex-1 bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-700 transition shadow-sm">Copiar Código</button>
+                                <button onclick="handleManualImport()" class="flex-1 bg-white text-slate-600 border border-slate-300 px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition shadow-sm">Pegar Código</button>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                showConfirmButton: false,
+                showCloseButton: true,
+                didOpen: () => lucide.createIcons()
+            });
+        }
+
+        async function handleCloudExport() {
+            const statusBox = document.getElementById('cloud-status-box');
+            statusBox.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-800', 'border', 'border-emerald-200');
+            statusBox.classList.add('bg-blue-50', 'text-blue-800');
+            statusBox.innerHTML = '<i class="animate-pulse">Subiendo a la nube...</i>';
+
+            const pin = Math.floor(100000 + Math.random() * 900000).toString(); // PIN de 6 dígitos
+            const payload = getBackupPayload();
+            
+            const success = await window.saveToCloudFirestore(pin, payload);
+            
+            if(success) {
+                statusBox.classList.replace('bg-blue-50', 'bg-emerald-50');
+                statusBox.classList.replace('text-blue-800', 'text-emerald-800');
+                statusBox.classList.add('border', 'border-emerald-200');
+                statusBox.innerHTML = `✅ ¡Listo! En tu otro dispositivo elegí "Bajar Datos" e ingresá este PIN:<br><strong class="text-2xl tracking-widest mt-2 block">${pin}</strong>`;
+            } else {
+                statusBox.classList.replace('bg-blue-50', 'bg-red-50');
+                statusBox.classList.replace('text-blue-800', 'text-red-700');
+                statusBox.innerHTML = `❌ Hubo un error al subir los datos. Intenta de nuevo.`;
+            }
+        }
+
+        async function handleCloudImport() {
+            Swal.fire({
+                title: 'Bajar de la Nube',
+                text: 'Ingresá el PIN de 6 dígitos que generaste en tu otro dispositivo. ESTO SOBREESCRIBIRÁ LOS DATOS ACTUALES.',
+                input: 'number',
+                inputAttributes: { maxlength: 6 },
+                showCancelButton: true,
+                confirmButtonText: 'Descargar Datos',
+                cancelButtonText: 'Cancelar',
+                showLoaderOnConfirm: true,
+                preConfirm: async (pin) => {
+                    if(!pin || pin.length !== 6) {
+                        Swal.showValidationMessage('El PIN debe tener 6 números.');
+                        return false;
+                    }
+                    const payload = await window.loadFromCloudFirestore(pin);
+                    if (!payload) {
+                        Swal.showValidationMessage('No se encontraron datos para ese PIN o ya expiró.');
+                        return false;
+                    }
+                    return payload;
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if(applyBackupPayload(result.value)) {
+                        Swal.fire('¡Sincronización Exitosa!', 'Tus datos se descargaron correctamente.', 'success');
+                    } else {
+                        Swal.fire('Error', 'El archivo de la nube estaba dañado.', 'error');
+                    }
+                }
+            });
+        }
+
+        function handleManualExport() {
+            const payload = getBackupPayload();
+            // Lo comprimimos en Base64 para que sea un solo bloque de texto copiabale sin problemas de saltos de linea
+            const b64Code = btoa(encodeURIComponent(payload));
+            
+            navigator.clipboard.writeText(b64Code).then(() => {
+                Swal.fire({
+                    title: '¡Código Copiado!',
+                    html: '<p class="text-sm">Pegá este código en un chat de WhatsApp con vos mismo. Luego abrilo desde tu celular y pegalo en la opción <b>Pegar Código</b>.</p>',
+                    icon: 'success',
+                    confirmButtonText: '¡Entendido!'
+                });
+            }).catch(() => {
+                // Fallback por si la API del portapapeles falla (ej: sin https)
+                Swal.fire({
+                    title: 'Copiá tu código',
+                    input: 'textarea',
+                    inputValue: b64Code,
+                    text: 'Seleccioná y copiá todo el texto de abajo:',
+                    confirmButtonText: 'Cerrar'
+                });
+            });
+        }
+
+        function handleManualImport() {
+            Swal.fire({
+                title: 'Pegar Código',
+                text: 'Pegá acá el texto largo que te enviaste por WhatsApp. ESTO SOBREESCRIBIRÁ LOS DATOS ACTUALES.',
+                input: 'textarea',
+                showCancelButton: true,
+                confirmButtonText: 'Cargar Datos',
+                cancelButtonText: 'Cancelar',
+                preConfirm: (b64Code) => {
+                    if(!b64Code) {
+                        Swal.showValidationMessage('Tenés que pegar un código.');
+                        return false;
+                    }
+                    try {
+                        const jsonStr = decodeURIComponent(atob(b64Code));
+                        return jsonStr;
+                    } catch(e) {
+                        Swal.showValidationMessage('El código no es válido o está incompleto.');
+                        return false;
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if(applyBackupPayload(result.value)) {
+                        Swal.fire('¡Sincronización Exitosa!', 'Tus datos se cargaron correctamente.', 'success');
+                    } else {
+                        Swal.fire('Error', 'El código de datos no se pudo leer correctamente.', 'error');
+                    }
+                }
+            });
+        }
+
+        // Carga Inicial
+        window.onload = loadData;
+
+    </script>
+</body>
+</html>
